@@ -1,0 +1,37 @@
+# ---- 运行时产物（绝不入库）----
+# 上传落盘的文件：LocalProvider 的 storage.local.dir 默认落在这里。
+data/
+# 日志：zap 的 director 配置（app/src/server/log/）。
+log/
+logs/
+.dev-logs/
+
+# ---- 本地配置覆盖与凭据 ----
+# config.local.yaml 用于覆盖 config.yaml 中的本机专属值（端口、DB、CS 凭据），
+# 永远不入库 —— CS 的 access-key/secret-key 只能走环境变量或本地文件。
+config.local.yaml
+config.*.local.yaml
+.env
+.env.*
+!.env.example
+
+# ---- Go 构建产物 ----
+# 注意：必须写成 /nucleagent-storage（Dockerfile 里 go build -o 的产物名）。
+# 不要写裸 "server" —— 那会匹配 app/src/server/ 目录，把整个源码树排除掉。
+/nucleagent-storage
+*.exe
+*.test
+*.out
+coverage.txt
+vendor/
+
+# ---- 编辑器 / 操作系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# go.work 指向工作区外的 prism-fusion 相对路径，因机器而异，不入库。
+go.work
+go.work.sum
