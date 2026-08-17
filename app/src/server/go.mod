@@ -1,4 +1,4 @@
-module nucleagent-storage
+module github.com/kwhitestone/nucleagent-storage
 
 go 1.25
 
@@ -6,9 +6,10 @@ require (
 	github.com/danielgtaylor/huma/v2 v2.34.1
 	github.com/gin-gonic/gin v1.11.0
 	github.com/google/uuid v1.6.0
+	github.com/kwhitestone/prism-fusion v0.0.0
+	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.26.0
 	gorm.io/gorm v1.31.1
-	whitestone.top/prism-fusion v0.0.0
 )
 
 require (
@@ -54,7 +55,6 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
-	github.com/spf13/viper v1.18.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
@@ -76,4 +76,5 @@ require (
 	modernc.org/sqlite v1.42.2 // indirect
 )
 
-replace whitestone.top/prism-fusion => ../../../../prism-fusion/src/server
+replace github.com/kwhitestone/prism-fusion => ../../../../prism-fusion/src/server
+

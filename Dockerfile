@@ -17,7 +17,6 @@ ENV CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://goproxy.cn,direct
 WORKDIR /build
 
 # Go module 根在 nucleagent-storage/app/src/server，replace 指向上层
-# prism-fusion，故把两个 module 都按 replace 的相对路径摆放。
 COPY nucleagent-storage/app/src/server/ ./nucleagent-storage/app/src/server/
 COPY prism-fusion/src/server/           ./prism-fusion/src/server/
 

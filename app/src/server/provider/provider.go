@@ -3,9 +3,11 @@
 // 核心原则：**storage 服务不代理文件字节流**。Provider 只负责生成凭证/签名 URL，
 // 客户端拿到后直连存储后端（CS/CDN）上传下载，绝不走 io.Copy 中转。
 //
-// 两个实现：
-//   - CSProvider    —— CS（cs.101.com），HMAC-SHA1 签名，客户端 POST 到 CS
-//   - LocalProvider —— 本地磁盘（开发环境），HMAC-SHA256 签名，客户端 PUT 到本服务的 /blob 端点
+// 内置实现：
+//   - LocalProvider —— 本地磁盘（默认），HMAC-SHA256 签名，客户端 PUT 到本服务的 /blob 端点
+//
+// 其它后端（对象存储、私有网关等）通过 RegisterFactory 注册为插件，
+// 配置住在 storage.{provider 名} 段下，见 registry.go。
 package provider
 
 import (

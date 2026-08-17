@@ -11,9 +11,9 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"go.uber.org/zap"
-	"whitestone.top/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/global"
 
-	"nucleagent-storage/addons/file/svc"
+	"github.com/kwhitestone/nucleagent-storage/addons/file/svc"
 )
 
 // fileSvc 由 plugin 在注册路由前注入。
@@ -146,7 +146,8 @@ type CreateFileInput struct {
 	Namespace string `header:"X-Namespace" required:"true" doc:"命名空间（core / executor）"`
 	Body      struct {
 		FileID    string `json:"fileId" required:"true" minLength:"1" doc:"presign 返回的文件ID"`
-		StoredURL string `json:"storedUrl,omitempty" doc:"存储地址；CS 私有文件必填 cs-dentry://{dentryId}"`
+		DentryID  string `json:"dentryId,omitempty" doc:"CS 上传响应里的 dentry_id；CS 私有文件用它回填存储地址"`
+		StoredURL string `json:"storedUrl,omitempty" doc:"存储地址；与 dentryId 二选一，dentryId 优先"`
 		Name      string `json:"name,omitempty" doc:"原始文件名"`
 		Size      int64  `json:"size,omitempty" minimum:"0" doc:"文件字节数"`
 		MimeType  string `json:"mimeType,omitempty" doc:"MIME 类型"`
@@ -172,6 +173,7 @@ func registerCreateFile(api huma.API) {
 	}, func(ctx context.Context, in *CreateFileInput) (*CreateFileOutput, error) {
 		rec, err := fileSvc.Register(ctx, in.Namespace, svc.RegisterInput{
 			FileID:    in.Body.FileID,
+			DentryID:  in.Body.DentryID,
 			StoredURL: in.Body.StoredURL,
 			Name:      in.Body.Name,
 			Size:      in.Body.Size,

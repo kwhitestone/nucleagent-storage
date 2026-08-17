@@ -59,32 +59,26 @@ cors:
       allow-credentials: true
 
 # 存储配置
+#
+# 默认 local（本地磁盘）：开箱即用，文件落在 ./data/uploads（已 gitignore）。
+# 其它后端通过插件接入（见 plugins/ 目录），配置段约定 storage.{provider 名}。
 storage:
-  provider: '${STORAGE_PROVIDER:-local}'   # local（开发）或 cs（生产）
+  provider: '${STORAGE_PROVIDER:-local}'
   max-size: 104857600                      # 单文件上限 100MB
   sign-secret: '${STORAGE_SIGN_SECRET:-nucleagent_storage_dev_secret}'  # LocalProvider 上传/下载 URL 签名密钥
 
-  # CS（cs.101.com）后端：客户端直传 CS、直连 CDN 下载
-  cs:
-    host: 'http://cs.101.com/v0.1'
-    cdn-host: 'https://cdncs.101.com/v0.1'
-    server-name: '${CS_SERVER_NAME}'
-    access-key: '${CS_ACCESS_KEY}'
-    secret-key: '${CS_SECRET_KEY}'
-    user-id: '${CS_USER_ID}'
-    scope: 1                               # 0=私有（签名下载），1=公开
-    expires: 1800                           # 下载签名有效期（秒）
-    timeout: 60
-
-  # 本地磁盘后端（开发环境）：客户端直传本服务的 /blob 端点
+  # 本地磁盘后端（默认）：客户端直传本服务的 /blob 端点
   local:
     dir: '${STORAGE_LOCAL_DIR:-./data/uploads}'
     base-url: '${STORAGE_LOCAL_BASE_URL:-http://localhost:26610}'
     expires: 1800
 
+  #   storage.provider: cs
+  #   storage.cs: { server-name, access-key, secret-key, ... }
+
   # 命名空间隔离：不同调用方写到不同路径前缀
   namespaces:
     - name: 'core'
-      prefix: '/nucleagent/core/'
+      prefix: '/core/'
     - name: 'executor'
-      prefix: '/nucleagent/executor/'
+      prefix: '/executor/'

@@ -13,7 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"nucleagent-storage/internal/config"
+	"github.com/spf13/viper"
+
+	"github.com/kwhitestone/nucleagent-storage/internal/config"
 )
 
 // LocalFilePrefix 本地文件在 DB 中的存储地址前缀。
@@ -180,4 +182,32 @@ func escapePath(full string) string {
 		parts[i] = url.PathEscape(seg)
 	}
 	return strings.Join(parts, "/")
+}
+
+// ---- 工厂注册 ------------------------------------------------------------
+//
+// local 是默认后端，主框架直接注册（插件注册机制见 registry.go）。
+
+// NewLocalFactory 返回 local Provider 的工厂。
+//
+// cfg 是 storage.local 段的 viper 子树，键：dir / base-url / expires。
+// signSecret 单独传入：签名密钥是全局配置（storage.sign-secret），不住在 local 段。
+func NewLocalFactory(signSecret string) Factory {
+	return func(cfg *viper.Viper) (Provider, error) {
+		if cfg == nil {
+			return nil, fmt.Errorf("provider: local 配置段缺失")
+		}
+		lc := &config.Local{
+			Dir:     cfg.GetString("dir"),
+			BaseURL: cfg.GetString("base-url"),
+			Expires: cfg.GetInt("expires"),
+		}
+		if lc.BaseURL == "" {
+			return nil, fmt.Errorf("provider: local 配置缺少 base-url")
+		}
+		if signSecret == "" {
+			return nil, fmt.Errorf("provider: local 配置缺少 sign-secret")
+		}
+		return NewLocalProvider(lc, signSecret), nil
+	}
 }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"nucleagent-storage/internal/config"
+	"github.com/kwhitestone/nucleagent-storage/internal/config"
 )
 
 func testLocal(t *testing.T) (*LocalProvider, string) {

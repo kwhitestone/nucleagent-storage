@@ -5,13 +5,13 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/gin-gonic/gin"
-	"whitestone.top/prism-fusion/global"
-	"whitestone.top/prism-fusion/plugin"
+	"github.com/kwhitestone/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/plugin"
 
-	"nucleagent-storage/addons/file/router"
-	"nucleagent-storage/addons/file/svc"
-	"nucleagent-storage/internal/config"
-	"nucleagent-storage/provider"
+	"github.com/kwhitestone/nucleagent-storage/addons/file/router"
+	"github.com/kwhitestone/nucleagent-storage/addons/file/svc"
+	"github.com/kwhitestone/nucleagent-storage/internal/config"
+	"github.com/kwhitestone/nucleagent-storage/provider"
 )
 
 // FilePlugin 文件元数据插件。

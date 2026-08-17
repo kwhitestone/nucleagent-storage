@@ -15,11 +15,11 @@ package blob
 
 import (
 	"github.com/gin-gonic/gin"
-	"whitestone.top/prism-fusion/global"
-	"whitestone.top/prism-fusion/plugin"
+	"github.com/kwhitestone/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/plugin"
 
-	"nucleagent-storage/internal/config"
-	"nucleagent-storage/provider"
+	"github.com/kwhitestone/nucleagent-storage/internal/config"
+	"github.com/kwhitestone/nucleagent-storage/provider"
 )
 
 // BlobPlugin 本地 blob 直传/直取插件。

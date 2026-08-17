@@ -11,9 +11,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"whitestone.top/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/global"
 
-	"nucleagent-storage/provider"
+	"github.com/kwhitestone/nucleagent-storage/provider"
 )
 
 // newHandler 构造 /blob 处理器。

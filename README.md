@@ -2,6 +2,8 @@
 
 独立文件存储服务（端口 **26610**），为 core / executor / 未来其他服务提供文件存储能力。
 
+> 开源版默认 **local 后端**（本地磁盘，开箱即用）；其它后端（如 CS）通过
+
 ## 核心设计：presign，不代理字节流
 
 storage 是一个**轻量 presign 服务**，只做两件事：
@@ -153,3 +155,32 @@ docker build -t nucleagent-storage -f nucleagent-storage/Dockerfile .
 - `STORAGE_PROVIDER=cs` + 配好 CS 凭据
 - `STORAGE_SIGN_SECRET` 换成强随机值
 - `provider=local` 时把 `/opt/data/uploads` 挂卷持久化
+
+## 存储后端插件
+
+除内置 `local` 外的存储后端以插件接入：主框架只认 `provider.Factory` 注册表
+（`provider/registry.go`），插件包 init() 自注册，主框架零编译成本。
+
+| 后端 | 仓库 | 接入方式 |
+|------|------|----------|
+| local（内置） | 本仓库 | `storage.provider: local` |
+
+### 新增一个后端插件
+
+1. 新建独立 Go module（module path 如 `github.com/kwhitestone/nucleagent-storage-xxx`）；
+2. 实现主框架的 `provider.Provider` 接口，并在包 init() 调
+   `provider.RegisterFactory("xxx", factory)`；
+3. 配置段约定 `storage.xxx`，工厂收到该段的 viper 子树自行解析；
+4. 以 submodule 挂到本仓库 `plugins/xxx`，主框架 main.go blank import
+   `plugins/xxx`（或直接用插件自己的 module path import）。
+
+### 本地多仓库联调
+
+
+```
+go 1.25
+use (
+    .
+    ../../../../prism-fusion/src/server
+)
+```

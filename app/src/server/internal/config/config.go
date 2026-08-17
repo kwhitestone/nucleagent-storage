@@ -11,95 +11,18 @@ import (
 	"path/filepath"
 	"strings"
 
-	"whitestone.top/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/global"
 )
 
 // 默认值常量。
 const (
 	// DefaultMaxSize 单文件大小上限（100MB）。
 	DefaultMaxSize int64 = 100 * 1024 * 1024
-	// DefaultCSHost CS 服务默认地址。
-	DefaultCSHost = "http://cs.101.com/v0.1"
-	// DefaultCSUserID CS 默认 uid（与 agentia 保持一致）。
-	DefaultCSUserID = "100000101"
-	// DefaultExpires 签名有效期（秒）。
-	DefaultExpires = 1800
-	// DefaultTimeout HTTP 超时（秒）。
-	DefaultTimeout = 60
 	// DefaultLocalDir LocalProvider 默认落盘目录。
 	DefaultLocalDir = "./data/uploads"
+	// DefaultExpires 签名有效期（秒）。
+	DefaultExpires = 1800
 )
-
-// CS 对应 config.yaml 的 storage.cs 段。
-//
-// 字段与 agentia-engine 的 config.CS 对齐（签名算法依赖 ServerName/AccessKey/
-// SecretKey/UserID/Scope），但去掉了对 agentia global 的依赖，自包含。
-type CS struct {
-	Host       string // CS 上传主机（http://cs.101.com/v0.1）
-	CDNHost    string // CDN 下载主机（https://cdncs.101.com/v0.1）
-	ServerName string // CS 服务名（签名 token 的第一段）
-	AccessKey  string // CS AccessKey（签名 token 的第二段）
-	SecretKey  string // CS SecretKey（HMAC-SHA1 密钥，不出网）
-	UserID     string // CS uid（policy 里的 uid 字段）
-	Scope      int    // 0=私有（需签名下载），1=公开
-	Expires    int    // 下载签名有效期（秒）
-	Timeout    int    // HTTP 客户端超时（秒）
-}
-
-// GetHost 返回 CS 主机，空则用默认值。
-func (c *CS) GetHost() string {
-	if c.Host == "" {
-		return DefaultCSHost
-	}
-	return c.Host
-}
-
-// GetCDNHost 返回 CDN 下载主机。
-//
-// 显式配置优先；否则从 CS Host 推导（cs.101.com → cdncs.101.com，http → https）。
-func (c *CS) GetCDNHost() string {
-	if c.CDNHost != "" {
-		return c.CDNHost
-	}
-	host := c.GetHost()
-	cdn := strings.Replace(host, "cs.101.com", "cdncs.101.com", 1)
-	return strings.Replace(cdn, "http://", "https://", 1)
-}
-
-// GetScope 返回 scope。
-//
-// 注意：0 是合法值（私有），不能用 <=0 判空，否则永远拿不到私有 scope。
-// 未配置时（负数）默认 1（公开）。
-func (c *CS) GetScope() int {
-	if c.Scope < 0 {
-		return 1
-	}
-	return c.Scope
-}
-
-// GetExpires 返回签名有效期（秒），未配置用默认值。
-func (c *CS) GetExpires() int {
-	if c.Expires <= 0 {
-		return DefaultExpires
-	}
-	return c.Expires
-}
-
-// GetTimeout 返回 HTTP 超时（秒），未配置用默认值。
-func (c *CS) GetTimeout() int {
-	if c.Timeout <= 0 {
-		return DefaultTimeout
-	}
-	return c.Timeout
-}
-
-// GetUserID 返回 CS uid，空则用默认值。
-func (c *CS) GetUserID() string {
-	if c.UserID == "" {
-		return DefaultCSUserID
-	}
-	return c.UserID
-}
 
 // Local 对应 config.yaml 的 storage.local 段（开发环境用）。
 type Local struct {
@@ -119,14 +42,13 @@ func (l *Local) GetExpires() int {
 // Namespace 命名空间：不同调用方（core/executor）的路径隔离单元。
 type Namespace struct {
 	Name   string // 命名空间名（core / executor）
-	Prefix string // CS/本地路径前缀（/nucleagent/core/）
+	Prefix string // CS/本地路径前缀（/core/）
 }
 
 // Config storage 业务配置（对应 config.yaml 的 storage 段）。
 type Config struct {
-	Provider   string      // local（开发）或 cs
+	Provider   string      // provider 名（local 或插件名，如 cs）
 	MaxSize    int64       // 单文件大小上限（字节）
-	CS         CS          // CS 后端配置
 	Local      Local       // 本地磁盘后端配置
 	Namespaces []Namespace // 命名空间白名单
 	SignSecret string      // LocalProvider 上传/下载签名密钥
@@ -159,28 +81,12 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Provider: vp.GetString("storage.provider"),
 		MaxSize:  vp.GetInt64("storage.max-size"),
-		CS: CS{
-			Host:       clean(vp.GetString("storage.cs.host")),
-			CDNHost:    clean(vp.GetString("storage.cs.cdn-host")),
-			ServerName: clean(vp.GetString("storage.cs.server-name")),
-			AccessKey:  clean(vp.GetString("storage.cs.access-key")),
-			SecretKey:  clean(vp.GetString("storage.cs.secret-key")),
-			UserID:     clean(vp.GetString("storage.cs.user-id")),
-			Scope:      -1, // 哨兵值：下面按 IsSet 区分「未配置」与「显式配 0」
-			Expires:    vp.GetInt("storage.cs.expires"),
-			Timeout:    vp.GetInt("storage.cs.timeout"),
-		},
 		Local: Local{
 			Dir:     clean(vp.GetString("storage.local.dir")),
 			BaseURL: clean(vp.GetString("storage.local.base-url")),
 			Expires: vp.GetInt("storage.local.expires"),
 		},
 		SignSecret: clean(vp.GetString("storage.sign-secret")),
-	}
-
-	// scope=0（私有）是合法且有意义的值，必须区分「没配」和「配了 0」。
-	if vp.IsSet("storage.cs.scope") {
-		cfg.CS.Scope = vp.GetInt("storage.cs.scope")
 	}
 
 	// 命名空间白名单。
@@ -200,10 +106,6 @@ func Load() (*Config, error) {
 
 	// 环境变量优先覆盖（viper 的 ${VAR} 不一定被展开，显式兜底）。
 	cfg.Provider = envDefault("STORAGE_PROVIDER", cfg.Provider, "local")
-	cfg.CS.AccessKey = envDefault("CS_ACCESS_KEY", cfg.CS.AccessKey, "")
-	cfg.CS.SecretKey = envDefault("CS_SECRET_KEY", cfg.CS.SecretKey, "")
-	cfg.CS.UserID = envDefault("CS_USER_ID", cfg.CS.UserID, "")
-	cfg.CS.ServerName = envDefault("CS_SERVER_NAME", cfg.CS.ServerName, "")
 	cfg.Local.Dir = envDefault("STORAGE_LOCAL_DIR", cfg.Local.Dir, DefaultLocalDir)
 	cfg.Local.BaseURL = envDefault("STORAGE_LOCAL_BASE_URL", cfg.Local.BaseURL, "")
 	cfg.SignSecret = envDefault("STORAGE_SIGN_SECRET", cfg.SignSecret, "")
@@ -215,8 +117,8 @@ func Load() (*Config, error) {
 	// 命名空间未配置时给出默认的 core/executor 两个，避免开箱即不可用。
 	if len(cfg.Namespaces) == 0 {
 		cfg.Namespaces = []Namespace{
-			{Name: "core", Prefix: "/nucleagent/core/"},
-			{Name: "executor", Prefix: "/nucleagent/executor/"},
+			{Name: "core", Prefix: "/core/"},
+			{Name: "executor", Prefix: "/executor/"},
 		}
 	}
 
@@ -249,22 +151,8 @@ func (c *Config) validate() error {
 		if c.SignSecret == "" {
 			return fmt.Errorf("config: provider=local 时 storage.sign-secret 必填（用于上传/下载签名）")
 		}
-	case "cs":
-		missing := make([]string, 0, 4)
-		if c.CS.ServerName == "" {
-			missing = append(missing, "storage.cs.server-name")
-		}
-		if c.CS.AccessKey == "" {
-			missing = append(missing, "storage.cs.access-key")
-		}
-		if c.CS.SecretKey == "" {
-			missing = append(missing, "storage.cs.secret-key")
-		}
-		if len(missing) > 0 {
-			return fmt.Errorf("config: provider=cs 缺少必填项: %s", strings.Join(missing, ", "))
-		}
 	default:
-		return fmt.Errorf("config: 不支持的 storage.provider=%q（可选 local / cs）", c.Provider)
+		// 插件后端：必填项由插件自己的 validate 负责（见 provider.Build 报错）
 	}
 
 	for _, ns := range c.Namespaces {

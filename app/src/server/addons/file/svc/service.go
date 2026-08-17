@@ -8,13 +8,14 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-	"whitestone.top/prism-fusion/global"
+	"github.com/kwhitestone/prism-fusion/global"
 
-	"nucleagent-storage/internal/config"
-	"nucleagent-storage/provider"
+	"github.com/kwhitestone/nucleagent-storage/internal/config"
+	"github.com/kwhitestone/nucleagent-storage/provider"
 )
 
 // 业务错误，供 router 层映射到 HTTP 状态码。
@@ -114,12 +115,39 @@ func (s *Service) Presign(ctx context.Context, namespace, filename, contentType 
 
 // RegisterInput 上传完成后的注册参数。
 type RegisterInput struct {
-	FileID    string
+	FileID string
+	// StoredURL 存储地址。CS 私有文件可留空，改用 DentryID。
 	StoredURL string
-	Name      string
-	Size      int64
-	MimeType  string
-	SHA256    string
+	// DentryID CS 上传响应里的 dentry_id。
+	//
+	// 客户端直传 CS 后拿到它，回传即可 —— 服务端负责转成 cs-dentry:// 形态，
+	// 客户端不需要知道我们的内部 URI 约定。与 StoredURL 二选一，DentryID 优先。
+	DentryID string
+	Name     string
+	Size     int64
+	MimeType string
+	SHA256   string
+}
+
+// resolveStoredURL 决定本次注册最终要写入的存储 地址。
+//
+// 优先级：DentryID（引用型后端的正路）> 客户端回传的 StoredURL > presign 时预置的值。
+// 返回空串表示三者皆无 —— 调用方必须据此拒绝注册。
+func resolveStoredURL(prv provider.Provider, in RegisterInput, existing string) string {
+	if id := strings.TrimSpace(in.DentryID); id != "" {
+		if rm, ok := prv.(provider.RefMaker); ok {
+			return rm.MakeRefURL(id)
+		}
+	}
+	if s := strings.TrimSpace(in.StoredURL); s != "" {
+		// 客户端可能回传一条**签名的**下载 URL；它带过期 token，
+		// 直接入库会导致文件几小时后永久 403，须由后端收敛回 durable 形态。
+		if nz, ok := prv.(provider.StoredURLNormalizer); ok {
+			return nz.NormalizeStoredURL(s)
+		}
+		return s
+	}
+	return existing
 }
 
 // Register 上传完成回调：补齐元数据并置为 active。
@@ -151,12 +179,18 @@ func (s *Service) Register(ctx context.Context, namespace string, in RegisterInp
 		return nil, ErrForbidden
 	}
 
+	// 先定地址再写库：地址缺失时必须在置为 active **之前**失败，
+	// 否则会留下一条 active 但无 stored_url 的记录 —— 它能通过 Get，
+	// 却在下载时才炸，且没有任何路径能把它修回来。
+	storedURL := resolveStoredURL(s.prv, in, rec.StoredURL)
+	if storedURL == "" {
+		return nil, fmt.Errorf("storedUrl 不能为空（CS 私有文件需回传 dentryId 或 cs-dentry://{dentryId}）")
+	}
+
 	updates := map[string]interface{}{
 		"status":     StatusActive,
+		"stored_url": storedURL,
 		"updated_at": time.Now(),
-	}
-	if in.StoredURL != "" {
-		updates["stored_url"] = in.StoredURL
 	}
 	if in.Name != "" {
 		updates["orig_name"] = in.Name
@@ -173,11 +207,6 @@ func (s *Service) Register(ctx context.Context, namespace string, in RegisterInp
 
 	if err := db.WithContext(ctx).Model(&rec).Updates(updates).Error; err != nil {
 		return nil, fmt.Errorf("更新文件元数据失败: %w", err)
-	}
-
-	// storedURL 仍为空说明客户端没回传（CS 私有文件必须回传 dentryId）。
-	if rec.StoredURL == "" && in.StoredURL == "" {
-		return nil, fmt.Errorf("storedUrl 不能为空（CS 私有文件需回传 cs-dentry://{dentryId}）")
 	}
 
 	return s.Get(ctx, namespace, in.FileID)
@@ -260,26 +289,108 @@ func (s *Service) Delete(ctx context.Context, namespace, fileID string) error {
 }
 
 // expiresIn 返回当前 Provider 的签名有效期（秒）。
+//
+// local 用配置值；插件后端无统一接口，返回通用默认值（签名 URL 本就带过期时间，客户端可容忍）。
 func (s *Service) expiresIn() int {
-	if s.cfg.Provider == "cs" {
-		return s.cfg.CS.GetExpires()
+	if s.cfg.Provider == "local" {
+		return s.cfg.Local.GetExpires()
 	}
-	return s.cfg.Local.GetExpires()
+	return config.DefaultExpires
 }
 
-// buildObjectKey 生成对象相对路径：{yyyy}/{mm}/{fileId}{ext}。
+// buildObjectKey 生成对象相对路径：{yyyy}/{mm}/{fileId}/{filename}。
 //
-// 用 fileId 而非原始文件名做主体，避免同名覆盖与文件名注入；
-// 保留扩展名是为了 CDN 能正确推断 Content-Type。
+// fileId 单独占一层目录，原始文件名作为叶子节点。这样：
+//   - 同名文件天然隔离（各自在自己的 fileId 目录下），不会互相覆盖
+//   - 下载时 URL 末段就是真实文件名，浏览器/CDN 能给出正确的保存名与 Content-Type
+//   - 按 {yyyy}/{mm} 分片，避免单目录下对象数量爆炸
+//
+// 文件名会被清洗（见 sanitizeFileName）：CS 的 path 是签名 policy 的一部分，
+// 未清洗的文件名可能撑爆长度限制或注入路径分隔符。
 func buildObjectKey(fileID, filename string) (string, error) {
-	ext := path.Ext(path.Base(strings.ReplaceAll(filename, "\\", "/")))
-	// 扩展名只保留合法字符，长度设上限，防止畸形输入进路径。
-	if len(ext) > 16 || strings.ContainsAny(ext, "/\\ ?#") {
+	name := sanitizeFileName(filename)
+	now := time.Now().UTC()
+	key := fmt.Sprintf("%04d/%02d/%s/%s", now.Year(), int(now.Month()), fileID, name)
+	return provider.SanitizeKey(key)
+}
+
+// maxStoredFileNameLen 存储路径中文件名的最大字节数。
+//
+// CS 的 policy 里带完整 path，整条路径过长会被服务端拒绝；
+// 这里给文件名留一个保守上限，超出则截断主干、保留扩展名。
+const maxStoredFileNameLen = 96
+
+// sanitizeFileName 把用户提供的文件名清洗成可安全放进存储路径的形态。
+//
+// 处理项：
+//   - 只取 basename，丢掉任何目录成分（防 ../ 与绝对路径）
+//   - 剔除路径分隔符、控制字符与对 URL/签名有歧义的字符
+//   - 超长时截断主干但保留扩展名（扩展名决定 Content-Type，不能丢）
+//   - 清洗后为空则兜底为 "file"，保证路径始终有合法叶子节点
+func sanitizeFileName(filename string) string {
+	base := path.Base(strings.ReplaceAll(filename, "\\", "/"))
+	base = strings.TrimSpace(base)
+
+	// 全是 . 或 .. 的畸形输入，直接兜底。
+	if base == "" || base == "." || base == ".." {
+		return "file"
+	}
+
+	cleaned := strings.Map(func(r rune) rune {
+		// 控制字符与空白一律替换为下划线，避免 URL 里出现裸空格/换行。
+		if r < 0x20 || r == 0x7f {
+			return '_'
+		}
+		switch r {
+		case '/', '\\', '?', '#', '%', '"', '\'', '<', '>', '|', ':', '*':
+			return '_'
+		case ' ':
+			return '_'
+		}
+		return r
+	}, base)
+
+	// 先去掉前导点再取扩展名。否则点文件会被误判：
+	// path.Ext(".gitignore") 返回的是 ".gitignore" 整体（Go 的定义），
+	// 直接 TrimSuffix 会把主干清空，得到 "file.gitignore" 这种荒唐结果。
+	cleaned = strings.TrimLeft(cleaned, ".")
+	if cleaned == "" {
+		return "file"
+	}
+
+	ext := path.Ext(cleaned)
+	// 畸形/超长扩展名不予保留，避免它吃掉整个长度预算。
+	if len(ext) > 16 {
 		ext = ""
 	}
-	now := time.Now().UTC()
-	key := fmt.Sprintf("%04d/%02d/%s%s", now.Year(), int(now.Month()), fileID, ext)
-	return provider.SanitizeKey(key)
+	stem := strings.TrimSuffix(cleaned, ext)
+	stem = strings.Trim(stem, ".")
+	if stem == "" {
+		stem = "file"
+	}
+
+	// 截断按字节算，但不能把多字节字符（中文名很常见）切成半个。
+	if limit := maxStoredFileNameLen - len(ext); len(stem) > limit {
+		stem = truncateUTF8(stem, limit)
+		if stem == "" {
+			stem = "file"
+		}
+	}
+	return stem + ext
+}
+
+// truncateUTF8 按字节上限截断字符串，且不切断多字节字符。
+func truncateUTF8(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	// 从 limit 处向前回退到一个合法的 rune 边界。
+	for i := limit; i > 0; i-- {
+		if utf8.RuneStart(s[i]) {
+			return s[:i]
+		}
+	}
+	return ""
 }
 
 // guessContentType 按扩展名猜 MIME，猜不到用通用二进制类型。
