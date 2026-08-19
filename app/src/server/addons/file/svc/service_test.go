@@ -176,24 +176,24 @@ func TestResolveStoredURL(t *testing.T) {
 		want     string
 	}{
 		{
-			name: "dentryId 优先于一切",
-			in:   RegisterInput{DentryID: "d-1", StoredURL: "https://x/y.png"},
-			want: "cs-dentry://d-1",
+			name: "refId 优先于一切",
+			in:   RegisterInput{RefID: "d-1", StoredURL: "https://x/y.png"},
+			want: "ref://d-1",
 		},
 		{
-			name: "dentryId 会被转成 cs-dentry 形态",
-			in:   RegisterInput{DentryID: "abc-123"},
-			want: "cs-dentry://abc-123",
+			name: "refId 会被转成引用地址形态",
+			in:   RegisterInput{RefID: "abc-123"},
+			want: "ref://abc-123",
 		},
 		{
-			name: "无 dentryId 时用客户端回传的 storedUrl",
+			name: "无 refId 时用客户端回传的 storedUrl",
 			in:   RegisterInput{StoredURL: "https://cdn/x.png"},
 			want: "https://cdn/x.png",
 		},
 		{
-			name: "签名下载 URL 收敛回 cs-dentry",
-			in:   RegisterInput{StoredURL: "https://gcdncs.101.com/v0.1/download?dentryId=d-9&token=t&expireAt=1"},
-			want: "cs-dentry://d-9",
+			name: "签名下载 URL 收敛回引用地址",
+			in:   RegisterInput{StoredURL: "https://cdn.example.com/v0.1/download?refId=d-9&token=t&expireAt=1"},
+			want: "ref://d-9",
 		},
 		{
 			name:     "都没传则沿用 presign 预置值",
@@ -208,13 +208,13 @@ func TestResolveStoredURL(t *testing.T) {
 			want:     "",
 		},
 		{
-			name: "纯空白的 dentryId 视为未提供",
-			in:   RegisterInput{DentryID: "   ", StoredURL: "https://cdn/x.png"},
+			name: "纯空白的 refId 视为未提供",
+			in:   RegisterInput{RefID: "   ", StoredURL: "https://cdn/x.png"},
 			want: "https://cdn/x.png",
 		},
 	}
-	// 用 CS 插件的语义 fake：dentryId → cs-dentry://，签名 URL → 收敛回 dentry 形态。
-	// 主框架只依赖可选接口（RefMaker / StoredURLNormalizer），不感知 CS 细节。
+	// 引用型后端语义 fake：refId → ref://xxx，签名 URL → 收敛回引用形态。
+	// 主框架只依赖可选接口（RefMaker / StoredURLNormalizer），不感知后端细节。
 	prv := &fakeRefProvider{}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -228,12 +228,12 @@ func TestResolveStoredURL(t *testing.T) {
 type fakeRefProvider struct{ baseProvider }
 
 // MakeRefURL 实现 provider.RefMaker。
-func (f *fakeRefProvider) MakeRefURL(refID string) string { return "cs-dentry://" + refID }
+func (f *fakeRefProvider) MakeRefURL(refID string) string { return "ref://" + refID }
 
 // NormalizeStoredURL 实现 provider.StoredURLNormalizer。
 func (f *fakeRefProvider) NormalizeStoredURL(stored string) string {
-	if id := extractDentryIDFromURL(stored); id != "" {
-		return "cs-dentry://" + id
+	if id := extractRefIDFromURL(stored); id != "" {
+		return "ref://" + id
 	}
 	return stored
 }
@@ -250,13 +250,13 @@ func (baseProvider) PresignDownload(ctx context.Context, storedURL string) (stri
 }
 func (baseProvider) Delete(ctx context.Context, storedURL string) error { return provider.ErrNotSupported }
 
-// extractDentryIDFromURL 从签名下载 URL 的查询串提取 dentryId。
-func extractDentryIDFromURL(stored string) string {
+// extractRefIDFromURL 从签名下载 URL 的查询串提取引用 ID。
+func extractRefIDFromURL(stored string) string {
 	u, err := url.Parse(stored)
 	if err != nil {
 		return ""
 	}
-	return u.Query().Get("dentryId")
+	return u.Query().Get("refId")
 }
 
 // TestGuessContentType 扩展名推断 MIME，未知类型兜底为通用二进制。

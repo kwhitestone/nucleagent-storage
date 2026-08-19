@@ -24,7 +24,7 @@ type File struct {
 	Namespace string `json:"namespace" gorm:"column:namespace;size:32;index;comment:命名空间"`
 	// ObjectKey 命名空间内的对象相对路径（不含 prefix）。
 	ObjectKey string `json:"objectKey" gorm:"column:object_key;size:512;comment:命名空间内对象路径"`
-	// StoredURL 后端存储地址（cs-dentry://xxx 或 file:///nucleagent/core/xxx）。
+	// StoredURL 后端存储地址（后端自定义 scheme（如 ref://xxx）或 file:///nucleagent/core/xxx）。
 	StoredURL string `json:"storedUrl" gorm:"column:stored_url;size:512;comment:后端存储地址"`
 	// OrigName 上传时的原始文件名。
 	OrigName string `json:"origName" gorm:"column:orig_name;size:256;comment:原始文件名"`

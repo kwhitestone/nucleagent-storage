@@ -99,7 +99,7 @@ func (s *Service) Presign(ctx context.Context, namespace, filename, contentType 
 		FileID:    fileID,
 		Namespace: namespace,
 		ObjectKey: objectKey,
-		StoredURL: cred.StoredURL, // CS 私有文件此处为空，注册时回填
+		StoredURL: cred.StoredURL, // 引用型后端此处为空，注册时回填
 		OrigName:  filename,
 		Size:      size,
 		MimeType:  contentType,
@@ -116,13 +116,14 @@ func (s *Service) Presign(ctx context.Context, namespace, filename, contentType 
 // RegisterInput 上传完成后的注册参数。
 type RegisterInput struct {
 	FileID string
-	// StoredURL 存储地址。CS 私有文件可留空，改用 DentryID。
+	// StoredURL 存储地址。引用型后端可留空，改用 RefID。
 	StoredURL string
-	// DentryID CS 上传响应里的 dentry_id。
+	// RefID 存储后端返回的引用 ID。
 	//
-	// 客户端直传 CS 后拿到它，回传即可 —— 服务端负责转成 cs-dentry:// 形态，
-	// 客户端不需要知道我们的内部 URI 约定。与 StoredURL 二选一，DentryID 优先。
-	DentryID string
+	// 部分后端上传完成前拿不到持久地址，客户端把后端返回的引用 ID 回传，
+	// 服务端经 Provider 转成入库地址（见 provider.RefMaker）。
+	// 与 StoredURL 二选一，RefID 优先。
+	RefID string
 	Name     string
 	Size     int64
 	MimeType string
@@ -131,10 +132,10 @@ type RegisterInput struct {
 
 // resolveStoredURL 决定本次注册最终要写入的存储 地址。
 //
-// 优先级：DentryID（引用型后端的正路）> 客户端回传的 StoredURL > presign 时预置的值。
+// 优先级：RefID（引用型后端的正路）> 客户端回传的 StoredURL > presign 时预置的值。
 // 返回空串表示三者皆无 —— 调用方必须据此拒绝注册。
 func resolveStoredURL(prv provider.Provider, in RegisterInput, existing string) string {
-	if id := strings.TrimSpace(in.DentryID); id != "" {
+	if id := strings.TrimSpace(in.RefID); id != "" {
 		if rm, ok := prv.(provider.RefMaker); ok {
 			return rm.MakeRefURL(id)
 		}
@@ -184,7 +185,7 @@ func (s *Service) Register(ctx context.Context, namespace string, in RegisterInp
 	// 却在下载时才炸，且没有任何路径能把它修回来。
 	storedURL := resolveStoredURL(s.prv, in, rec.StoredURL)
 	if storedURL == "" {
-		return nil, fmt.Errorf("storedUrl 不能为空（CS 私有文件需回传 dentryId 或 cs-dentry://{dentryId}）")
+		return nil, fmt.Errorf("storedUrl 不能为空（引用型后端需回传 refId）")
 	}
 
 	updates := map[string]interface{}{
@@ -265,7 +266,7 @@ func (s *Service) PresignDownload(ctx context.Context, namespace, fileID string)
 
 // Delete 删除文件：先删后端字节，再软删元数据。
 //
-// 后端不支持删除（如 CS）时只做软删除，不视为失败。
+// 后端不支持删除时只做软删除，不视为失败（见 provider.ErrNotSupported）。
 func (s *Service) Delete(ctx context.Context, namespace, fileID string) error {
 	rec, err := s.Get(ctx, namespace, fileID)
 	if err != nil {

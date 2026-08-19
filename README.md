@@ -2,7 +2,7 @@
 
 独立文件存储服务（端口 **26610**），为 core / executor / 未来其他服务提供文件存储能力。
 
-> 开源版默认 **local 后端**（本地磁盘，开箱即用）；其它后端（如 CS）通过
+> 默认 **local 后端**（本地磁盘，开箱即用）；其它后端通过
 
 ## 核心设计：presign，不代理字节流
 
@@ -11,16 +11,16 @@ storage 是一个**轻量 presign 服务**，只做两件事：
 1. 管理文件元数据（MySQL `files` 表）
 2. 签发上传凭证 / 下载签名 URL
 
-**它从不搬运文件字节。** 上传和下载都是客户端直连存储后端（CS/CDN 或本地 blob 端点），
+**它从不搬运文件字节。** 上传和下载都是客户端直连存储后端（插件后端或本地 blob 端点），
 服务端没有任何 `io.Copy` 中转。好处：storage 不会因大文件传输被打爆，水平扩容只受 DB 限制。
 
 ```
 上传：客户端 ──presign──> storage        （拿凭证，JSON）
-     客户端 ──直传────> CS / CDN        （字节流，不经 storage）
+     客户端 ──直传────> 存储后端        （字节流，不经 storage）
      客户端 ──注册────> storage        （回填元数据，JSON）
 
 下载：客户端 ──签名────> storage        （拿签名 URL，JSON）
-     客户端 ──直取────> CS / CDN        （字节流，不经 storage）
+     客户端 ──直取────> 存储后端        （字节流，不经 storage）
 ```
 
 ## API
@@ -71,28 +71,27 @@ DL=$(curl -s "http://localhost:26610/api/v1/files/$FILE_ID/download" \
 curl -o out.txt "$DL"
 ```
 
-**CS 私有文件（scope=0）的差异**：presign 阶段拿不到 `dentryId`，`storedUrl` 为空。
-客户端需用 CS 上传响应里的 `dentry_id` 拼成 `cs-dentry://{dentryId}` 回传给第 3 步。
+**引用型后端的差异**：部分后端 presign 阶段拿不到持久地址，`storedUrl` 为空。
+客户端把后端返回的引用 ID 以 `refId` 字段回传给第 3 步，服务端经 Provider 转成入库地址。
 
 ## Provider
 
 | Provider | 上传目标 | 签名算法 | 用途 |
 |----------|---------|---------|------|
-| `local` | 本服务 `/blob` 端点（PUT） | HMAC-SHA256 | 开发环境 |
-| `cs` | cs.101.com（POST multipart） | HMAC-SHA1 | 生产环境 |
+| `local` | 本服务 `/blob` 端点（PUT） | HMAC-SHA256 | 内置，开发环境 |
+| 插件后端 | 由插件定义（如 POST multipart） | 由插件定义 | 见 plugins/ 目录 |
 
-CS 签名逻辑移植自 `agentia-engine/src/service/cs/cs_storage.go`，去掉了对 agentia
-`config`/`global` 的依赖，自包含。等价性由 `provider/cs_test.go` 的交叉验证保证。
+主框架只认 `provider.Factory` 注册表；内置 `local`，其它后端由插件包 init() 自注册。
 
 ### `/blob` 是什么
 
-CS 模式下客户端直传的目标是 cs.101.com；本地开发没有那台服务器，所以由本服务提供
+表单型后端模式下客户端直传的目标是远端存储服务；本地开发没有那台服务器，所以由本服务提供
 一个**独立于元数据 API** 的 `/blob` 端点充当存储后端：
 
 - `/api/v1/files` — 元数据 API，JWT 认证，只处理 JSON
 - `/blob` — 存储后端，HMAC 签名 URL 自鉴权，只搬字节，不碰 DB
 
-客户端流程与 CS 模式完全同构，切到 `provider=cs` 后 `/blob` 自动不注册，客户端代码一行不用改。
+客户端流程与远端后端模式完全同构，切到其它 provider 后 `/blob` 自动不注册，客户端代码一行不用改。
 
 ## 配置
 
@@ -100,18 +99,14 @@ CS 模式下客户端直传的目标是 cs.101.com；本地开发没有那台服
 
 ```yaml
 storage:
-  provider: local              # local(开发) / cs(生产)
+  provider: local              # local(内置) / 插件名
   max-size: 104857600          # 单文件上限 100MB
   sign-secret: '${STORAGE_SIGN_SECRET}'   # LocalProvider URL 签名密钥
-  cs:
-    server-name: '${CS_SERVER_NAME}'
-    access-key: '${CS_ACCESS_KEY}'
-    secret-key: '${CS_SECRET_KEY}'
-    scope: 1                   # 0=私有(签名下载) 1=公开
   local:
     dir: './data/uploads'
     base-url: 'http://localhost:26610'
   namespaces:                  # 命名空间白名单（隔离不同调用方）
+  # 插件后端配置住在 storage.{插件名} 段，见各插件 README
     - {name: core,     prefix: /nucleagent/core/}
     - {name: executor, prefix: /nucleagent/executor/}
 ```
@@ -127,7 +122,7 @@ storage:
 - **路径穿越两道防线**：`SanitizeKey` 清洗 + `ResolvePath` 落盘前校验必须位于 `local.dir` 之内
   （即便签名被伪造也写不出去）
 - **原子写入**：先写临时文件再 rename，失败不留半截文件
-- **独立 CS 凭据**：与其他服务分开配置
+- **独立后端凭据**：与其它服务分开配置，只走环境变量
 
 ## 开发
 
@@ -152,7 +147,7 @@ docker build -t nucleagent-storage -f nucleagent-storage/Dockerfile .
 ```
 
 生产环境记得：
-- `STORAGE_PROVIDER=cs` + 配好 CS 凭据
+- `STORAGE_PROVIDER={插件名}` + 按插件 README 配好后端
 - `STORAGE_SIGN_SECRET` 换成强随机值
 - `provider=local` 时把 `/opt/data/uploads` 挂卷持久化
 

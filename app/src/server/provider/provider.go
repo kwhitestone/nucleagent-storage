@@ -21,7 +21,7 @@ var ErrNotSupported = errors.New("provider: 不支持的操作")
 // UploadCredential 上传凭证：客户端凭此直传存储后端。
 //
 // Method + URL + Headers + FormFields 共同描述一次完整的上传请求：
-//   - CS：Method=POST，URL 带 token/date/policy 查询串，FormFields 为 multipart 表单字段
+//   - 表单型后端：Method=POST，URL 带签名查询串，FormFields 为 multipart 表单字段
 //   - Local：Method=PUT，URL 带 sig/expires 查询串，无表单字段
 type UploadCredential struct {
 	// Method 上传使用的 HTTP 方法（POST / PUT）。
@@ -32,12 +32,12 @@ type UploadCredential struct {
 	Headers map[string]string `json:"headers,omitempty"`
 	// FormFields multipart 表单字段（CS 上传必填；Local 为空）。
 	FormFields map[string]string `json:"formFields,omitempty"`
-	// FileField 文件内容在 multipart 中的字段名（CS 为 filename）。
+	// FileField 文件内容在 multipart 中的字段名（表单型后端如 filename）。
 	FileField string `json:"fileField,omitempty"`
 	// StoredURL 上传成功后应回填的存储地址。
 	//
-	// CS 私有文件（scope=0）上传前拿不到 dentryId，此处为空，
-	// 客户端需用 CS 上传响应里的 dentry_id 调 POST /api/v1/files 注册。
+	// 引用型后端上传前拿不到持久地址，此处为空，
+	// 客户端需用后端返回的引用 ID 调 POST /api/v1/files 注册（见 RefMaker）。
 	// Local 上传前即可确定路径，此处直接给出 file:// 地址。
 	StoredURL string `json:"storedUrl,omitempty"`
 	// ExpiresAt 凭证过期的 Unix 毫秒时间戳。
@@ -62,7 +62,7 @@ type Provider interface {
 
 	// PresignDownload 把存储地址转换成客户端可直接 GET 的签名 URL。
 	//
-	// storedURL 是入库的存储地址（cs-dentry://xxx 或 file:///path）。
+	// storedURL 是入库的存储地址（后端自定义 scheme 或 file:///path）。
 	PresignDownload(ctx context.Context, storedURL string) (string, error)
 
 	// Delete 删除后端上的文件。后端不支持时返回 ErrNotSupported。

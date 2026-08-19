@@ -1,7 +1,7 @@
 // Package router 文件元数据 HTTP 路由（huma 注册，OpenAPI 自动生成）。
 //
 // 所有端点都只处理元数据与签名，**不接收也不返回文件字节流**。
-// 字节流走 LocalProvider 的 /blob 端点或 CS/CDN，客户端直连。
+// 字节流走 LocalProvider 的 /blob 端点或后端插件的目标地址，客户端直连。
 package router
 
 import (
@@ -42,9 +42,9 @@ type PresignUploadData struct {
 	Method     string            `json:"method" doc:"上传使用的 HTTP 方法"`
 	UploadURL  string            `json:"uploadUrl" doc:"上传目标地址（已含签名）"`
 	Headers    map[string]string `json:"headers,omitempty" doc:"上传需携带的请求头"`
-	FormFields map[string]string `json:"formFields,omitempty" doc:"multipart 表单字段（CS 后端必填）"`
+	FormFields map[string]string `json:"formFields,omitempty" doc:"multipart 表单字段（表单型后端必填）"`
 	FileField  string            `json:"fileField,omitempty" doc:"文件内容的 multipart 字段名"`
-	StoredURL  string            `json:"storedUrl,omitempty" doc:"预知的存储地址；CS 私有文件为空，需上传后回填"`
+	StoredURL  string            `json:"storedUrl,omitempty" doc:"预知的存储地址；引用型后端为空，需上传后回填"`
 	ExpiresAt  int64             `json:"expiresAt" doc:"凭证过期时间（Unix 毫秒）"`
 }
 
@@ -146,8 +146,8 @@ type CreateFileInput struct {
 	Namespace string `header:"X-Namespace" required:"true" doc:"命名空间（core / executor）"`
 	Body      struct {
 		FileID    string `json:"fileId" required:"true" minLength:"1" doc:"presign 返回的文件ID"`
-		DentryID  string `json:"dentryId,omitempty" doc:"CS 上传响应里的 dentry_id；CS 私有文件用它回填存储地址"`
-		StoredURL string `json:"storedUrl,omitempty" doc:"存储地址；与 dentryId 二选一，dentryId 优先"`
+		RefID    string `json:"refId,omitempty" doc:"存储后端返回的引用 ID；引用型后端用它回填存储地址"`
+		StoredURL string `json:"storedUrl,omitempty" doc:"存储地址；与 refId 二选一，refId 优先"`
 		Name      string `json:"name,omitempty" doc:"原始文件名"`
 		Size      int64  `json:"size,omitempty" minimum:"0" doc:"文件字节数"`
 		MimeType  string `json:"mimeType,omitempty" doc:"MIME 类型"`
@@ -173,7 +173,7 @@ func registerCreateFile(api huma.API) {
 	}, func(ctx context.Context, in *CreateFileInput) (*CreateFileOutput, error) {
 		rec, err := fileSvc.Register(ctx, in.Namespace, svc.RegisterInput{
 			FileID:    in.Body.FileID,
-			DentryID:  in.Body.DentryID,
+			RefID:    in.Body.RefID,
 			StoredURL: in.Body.StoredURL,
 			Name:      in.Body.Name,
 			Size:      in.Body.Size,

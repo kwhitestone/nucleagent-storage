@@ -42,7 +42,7 @@ func (l *Local) GetExpires() int {
 // Namespace 命名空间：不同调用方（core/executor）的路径隔离单元。
 type Namespace struct {
 	Name   string // 命名空间名（core / executor）
-	Prefix string // CS/本地路径前缀（/core/）
+	Prefix string // 存储路径前缀（/core/）
 }
 
 // Config storage 业务配置（对应 config.yaml 的 storage 段）。

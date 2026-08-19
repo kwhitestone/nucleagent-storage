@@ -73,8 +73,10 @@ storage:
     base-url: '${STORAGE_LOCAL_BASE_URL:-http://localhost:26610}'
     expires: 1800
 
-  #   storage.provider: cs
-  #   storage.cs: { server-name, access-key, secret-key, ... }
+  # 其它后端（如对象存储/私有网关）由插件提供（plugins/ 目录）：
+  #   storage.provider: {插件名}
+  #   storage.{插件名}: {...}   # 配置段约定，详见各插件 README
+  # 凭据只走环境变量，绝不入库。
 
   # 命名空间隔离：不同调用方写到不同路径前缀
   namespaces:

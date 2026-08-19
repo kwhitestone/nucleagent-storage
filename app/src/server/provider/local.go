@@ -27,7 +27,7 @@ const LocalFilePrefix = "file://"
 // BlobPath 本地 blob 直传/直取端点的路径前缀。
 //
 // 这是 LocalProvider 的「存储后端」：客户端 PUT 上传、GET 下载都直连它，
-// 元数据 API（/api/v1/files）不碰字节流，与 CS 模式保持同构。
+// 元数据 API（/api/v1/files）不碰字节流，与表单型后端模式保持同构。
 const BlobPath = "/blob"
 
 // LocalProvider 本地磁盘存储后端（开发环境用）。

@@ -33,8 +33,8 @@ func TestResolveNamespace(t *testing.T) {
 
 // TestExpandEnv 支持 ${VAR} 与 ${VAR:-default} 两种语法。
 //
-// config.yaml 里大量使用 ${CS_ACCESS_KEY} 这类占位符，viper 不一定展开，
-// 展开逻辑出错会让凭据变成字面量 "${CS_ACCESS_KEY}" 而非空值，
+// config.yaml 里大量使用 ${SOME_ACCESS_KEY} 这类占位符，viper 不一定展开，
+// 展开逻辑出错会让凭据变成字面量 "${SOME_ACCESS_KEY}" 而非空值，
 // 从而绕过 validate 的必填校验。
 func TestExpandEnv(t *testing.T) {
 	t.Setenv("CFG_TEST_SET", "real-value")

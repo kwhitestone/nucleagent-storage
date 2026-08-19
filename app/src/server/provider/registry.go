@@ -61,7 +61,7 @@ func Names() []string {
 
 // RefMaker 是可选接口：支持「引用型存储地址」的 Provider 实现它。
 //
-// 典型场景：后端文件在上传完成前拿不到持久地址（如 CS 的 dentryId），
+// 典型场景：后端文件在上传完成前拿不到持久地址（引用型后端），
 // 客户端把后端返回的引用 ID 回传，服务端调 MakeRefURL 转成入库用的
 // scheme://xxx 地址。LocalProvider 不实现（地址上传前即确定）。
 type RefMaker interface {

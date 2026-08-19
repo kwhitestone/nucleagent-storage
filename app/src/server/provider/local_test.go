@@ -151,8 +151,8 @@ func TestLocalURLRoundTrip(t *testing.T) {
 	if got, ok := ParseLocalURL(MakeLocalURL(full)); !ok || got != full {
 		t.Errorf("file:// 往返失败: got=%s ok=%v", got, ok)
 	}
-	if _, ok := ParseLocalURL("cs-dentry://x"); ok {
-		t.Error("cs-dentry 地址不应被解析为本地地址")
+	if _, ok := ParseLocalURL("ref://x"); ok {
+		t.Error("非本地 scheme 地址不应被解析为本地地址")
 	}
 }
 
@@ -232,8 +232,8 @@ func TestLocalDelete_IsIdempotent(t *testing.T) {
 	if err := p.Delete(context.Background(), MakeLocalURL("/nucleagent/core/missing.txt")); err != nil {
 		t.Errorf("删除不存在的文件应幂等成功，实际: %v", err)
 	}
-	// 非本地地址应报错（避免把 CS 地址误当本地路径删）。
-	if err := p.Delete(context.Background(), "cs-dentry://x"); err == nil {
+	// 非本地地址应报错（避免把其它后端地址误当本地路径删）。
+	if err := p.Delete(context.Background(), "ref://x"); err == nil {
 		t.Error("删除非本地地址应报错")
 	}
 }
