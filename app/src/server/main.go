@@ -3,8 +3,7 @@
 // 定位：轻量 presign 服务。管理文件元数据 + 签发上传/下载凭证，
 // **不代理文件字节流** —— 客户端拿凭证直连存储后端（本地 blob 端点或插件后端）。
 //
-// 存储后端通过 provider.Build 按配置装配；内置 local，其它后端见
-// plugins/ 目录（git submodule，blank import 触发自注册）。
+// 存储后端通过 provider.Build 按配置装配；当前内置 local（本地磁盘）。
 package main
 
 import (
@@ -19,8 +18,6 @@ import (
 	_ "github.com/kwhitestone/prism-fusion/addons"
 	// storage 业务插件：file（元数据）+ blob（本地存储后端）。
 	_ "github.com/kwhitestone/nucleagent-storage/addons"
-	// 存储后端插件（git submodule）。需要哪个后端就 import 哪个，
-	// init() 里 RegisterFactory 自注册；不需要的后端零编译成本。
 
 	authMiddleware "github.com/kwhitestone/prism-fusion/addons/auth/middleware"
 
@@ -78,7 +75,7 @@ func initializeSystem() {
 
 // buildProvider 按配置构造存储后端。
 //
-// local 直接注册（默认后端）；其它后端由插件 init() 自注册。
+// local 直接注册（默认且唯一内置后端）。
 func buildProvider(cfg *storageconfig.Config, vp *viper.Viper) (provider.Provider, error) {
 	provider.RegisterFactory("local", provider.NewLocalFactory(cfg.SignSecret))
 	return provider.Build(cfg.Provider, vp)

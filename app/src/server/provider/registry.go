@@ -9,6 +9,7 @@ import (
 
 // Factory Provider 工厂：按名字构造存储后端。
 //
+// cfg 是该 provider 段的 viper 子树（如 storage.s3.*），
 // 由插件自行读取自己的配置键 —— 主框架不感知任何插件的配置结构。
 type Factory func(cfg *viper.Viper) (Provider, error)
 

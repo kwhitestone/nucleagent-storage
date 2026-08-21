@@ -17,6 +17,7 @@ ENV CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://goproxy.cn,direct
 WORKDIR /build
 
 # Go module 根在 nucleagent-storage/app/src/server，replace 指向上层
+# prism-fusion，故把两个 module 都按 replace 的相对路径摆放。
 COPY nucleagent-storage/app/src/server/ ./nucleagent-storage/app/src/server/
 COPY prism-fusion/src/server/           ./prism-fusion/src/server/
 
@@ -26,7 +27,7 @@ RUN go build -ldflags="-s -w" -o /out/nucleagent-storage .
 # ---- Stage 2: 运行镜像 ----------------------------------------------------
 FROM alpine:3.20 AS final
 
-# ca-certificates：provider=cs 时需要与 CS/CDN 建 HTTPS 连接
+# ca-certificates：HTTPS 连接需要
 # tzdata：日志时间戳按本地时区
 RUN apk add --no-cache ca-certificates tzdata wget && \
     adduser -D -u 10001 -h /opt storage

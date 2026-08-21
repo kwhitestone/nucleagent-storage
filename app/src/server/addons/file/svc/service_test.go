@@ -225,6 +225,7 @@ func TestResolveStoredURL(t *testing.T) {
 	}
 }
 
+// fakeRefProvider 模拟引用型后端（如对象存储）实现的可选接口。
 type fakeRefProvider struct{ baseProvider }
 
 // MakeRefURL 实现 provider.RefMaker。

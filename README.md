@@ -2,7 +2,7 @@
 
 独立文件存储服务（端口 **26610**），为 core / executor / 未来其他服务提供文件存储能力。
 
-> 默认 **local 后端**（本地磁盘，开箱即用）；其它后端通过
+> 当前使用 **local 后端**（本地磁盘，开箱即用）；其它后端可通过插件接入，见下文「存储后端插件」。
 
 ## 核心设计：presign，不代理字节流
 
@@ -171,6 +171,7 @@ docker build -t nucleagent-storage -f nucleagent-storage/Dockerfile .
 
 ### 本地多仓库联调
 
+本仓库 go.work（不入库）指向工作区内的 prism-fusion：
 
 ```
 go 1.25
